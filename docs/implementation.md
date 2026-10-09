@@ -22,6 +22,8 @@
 
 ## 验证记录
 
+以下为早期实施阶段记录。首版最新功能、端口、路径和验证基线见 [handover.md](handover.md) 与 [acceptance.md](acceptance.md)：后端 64 项通过、1 个 Doris 跳过，前端 24 项、浏览器 7 项通过。
+
 2026-10-09，本地 Python 3.12.11 / MySQL 8.4.3：
 
 - `RUN_MYSQL_TESTS=1 uv run pytest -q`：40 项通过，1 条上游 Starlette 弃用警告。
