@@ -1,0 +1,8 @@
+[
+ {"input":"SELECT 1; SELECT 2;", "expected":["SELECT 1", "SELECT 2"]},
+ {"input":"SELECT 'a;b', `x;y`; SELECT \"c;d\";", "expected":["SELECT 'a;b', `x;y`", "SELECT \"c;d\""]},
+ {"input":"-- comment;\nSELECT 1 /* ; */; # tail;", "expected":["-- comment;\nSELECT 1 /* ; */"]},
+ {"input":"SELECT 'it''s;fine'; SELECT 'a\\';b';", "expected":["SELECT 'it''s;fine'", "SELECT 'a\\';b'"]},
+ {"input":"/* comment */ ; -- only\n;", "expected":[]},
+ {"input":"SELECT 1--2;SELECT 3;", "expected":["SELECT 1--2", "SELECT 3"]}
+]

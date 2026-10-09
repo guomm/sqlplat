@@ -1,0 +1,14 @@
+.venv/
+.env
+__pycache__/
+.pytest_cache/
+*.pyc
+node_modules/
+dist/
+.local/
+playwright-report/
+test-results/
+
+.venv312/
+*.tsbuildinfo
+.superpowers/
