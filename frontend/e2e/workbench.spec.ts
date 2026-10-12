@@ -11,6 +11,13 @@ const password =
 test("真实 MySQL：登录、库表、三种执行范围、下载、历史与退出", async ({
   page,
 }) => {
+  // Public HTTP origins expose getRandomValues but not randomUUID.
+  await page.addInitScript(() => {
+    Object.defineProperty(Crypto.prototype, "randomUUID", {
+      value: undefined,
+      configurable: true,
+    });
+  });
   const errors: string[] = [];
   const requestedPaths: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));

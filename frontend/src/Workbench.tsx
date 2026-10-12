@@ -18,6 +18,7 @@ import { executionText, type ExecutionMode } from "./sql";
 import Results from "./Results";
 import SaveQueryModal, { type SaveSnapshot } from "./SaveQueryModal";
 import { formatSql } from "./formatSql";
+import { newDraftId } from "./draftId";
 
 type Draft = {
   id: string;
@@ -30,7 +31,7 @@ type Draft = {
   active?: boolean;
 };
 const fresh = (): Draft => ({
-  id: crypto.randomUUID(),
+  id: newDraftId(),
   name: "新查询",
   sql: "-- 从一条 SQL 开始探索\nSELECT 1 AS hello;",
   database: "",
