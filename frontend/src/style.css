@@ -448,30 +448,33 @@ button:focus-visible {
   gap: 15px;
 }
 .result-heading strong {
-  font-size: 12px;
+  font-size: 14px;
   margin-right: 12px;
 }
 .result-heading .ant-tag {
-  font-size: 10px;
+  font-size: 12px;
+}
+.results .muted {
+  font-size: 14px;
 }
 .result-actions {
   display: flex;
   gap: 6px;
 }
 .result-actions .ant-btn {
-  font-size: 12px;
+  font-size: 14px;
   height: 32px;
   min-width: 88px;
 }
 .results > .ant-alert {
   margin: 12px 15px;
-  font-size: 12px;
+  font-size: 14px;
 }
 .results > .ant-tabs {
   padding: 0 16px;
 }
 .results .ant-tabs-tab {
-  font-size: 12px;
+  font-size: 14px;
 }
 .result-table-scroll {
   overflow: auto;
@@ -481,7 +484,7 @@ button:focus-visible {
   table-layout: fixed;
   border-collapse: collapse;
   font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 11px;
+  font-size: 13px;
   min-width: 100%;
   width: max-content;
 }
@@ -518,7 +521,7 @@ button:focus-visible {
 .row-index {
   color: #a2b0a7 !important;
   text-align: center !important;
-  font-size: 10px;
+  font-size: 12px;
 }
 .null-value {
   color: #a5b4aa;
@@ -554,22 +557,25 @@ button:focus-visible {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 10px;
+  font-size: 12px;
   color: #8b9c90;
   border-top: 1px solid var(--border);
+}
+.result-footer .ant-pagination {
+  font-size: 16px;
 }
 .running-state {
   display: flex;
   align-items: center;
   gap: 15px;
   padding: 30px;
-  font-size: 12px;
+  font-size: 14px;
   color: #83998a;
 }
 .write-result {
   text-align: center;
   padding: 28px;
-  font-size: 12px;
+  font-size: 14px;
   color: #84988c;
 }
 .write-result > span {
@@ -577,7 +583,7 @@ button:focus-visible {
   color: var(--green);
 }
 .write-result h3 {
-  font-size: 15px;
+  font-size: 17px;
 }
 .loading-result {
   padding: 40px;

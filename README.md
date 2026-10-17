@@ -51,19 +51,44 @@ npm run dev
 
 本机 HTTP 使用 `COOKIE_SECURE=false`。正式服务应配置 HTTPS 并设置 `COOKIE_SECURE=true`，页面与 `/sqlplat/api` 通过同一域名提供服务。前端构建命令为 `npm run build`，构建结果在 `frontend/dist`；静态服务器需要将 `/sqlplat/api/` 转发到后端 `/api/`，并为 `/sqlplat/` 下的前端路由返回 `index.html`。
 
+## 手动 SQL 初始化（空库）
+
+不通过 Alembic 首次建表时，可使用 [完整 MySQL 建表脚本](deploy/schema-mysql.sql)。脚本对应首版当前迁移版本 `d19297a3c813`，包含 6 张平台业务表及 `alembic_version`，带索引、外键、LONGTEXT 和微秒时间字段。
+
+先由管理员创建 `sqlplat` 数据库并授权平台账号，再从项目根目录导入：
+
+```sh
+mysql -h 127.0.0.1 -P 3306 -u sqlplat -p sqlplat < deploy/schema-mysql.sql
+```
+
+密码通过提示输入；远程 MySQL 替换地址和端口。该脚本仅用于空库，不删除数据，不自动补齐旧表。若之前迁移失败、已经部分建表，应先检查现有结构和报错，不要直接重复导入或清库。
+
+脚本全部执行成功后，末尾会写入当前 Alembic 版本，后续执行 `upgrade head` 不会重新建表。不要跳过错误继续执行，也不要仅复制版本记录到未完成建表的数据库。
+
+配置好 `.env` 后创建管理员并启动 API：
+
+```sh
+PYTHONPATH=backend uv run python -m app.cli create-admin admin
+./scripts/start-api.sh
+```
+
+管理员密码由应用生成安全哈希，不能在 `users.password_hash` 里填写明文密码。后续代码新增迁移时仍按正常迁移流程升级；此文件是指定版本的初始化快照。
+
 ## 通过 Nginx 子路径访问
 
 平台统一使用 `/sqlplat/`：页面和静态资源在该路径下，前端 API 与下载请求使用 `/sqlplat/api/...`。Vite 的 `base` 自动处理 JS、CSS、编辑器 worker 和动态加载资源，统一 API 地址由 `frontend/src/api.ts` 的 `apiUrl` 生成。
 
-本地 API 继续监听 `127.0.0.1:8001`，前端继续监听 `127.0.0.1:5180`。`deploy/nginx-sqlplat.conf` 提供开发服务的反向代理示例，配置后访问 <http://127.0.0.1:18000/sqlplat/>；不带末尾斜杠的 `/sqlplat` 会重定向到 `/sqlplat/`。已有监听 18000 的 server 时，只合并示例中的 location，不要重复创建 server；其他平台可在同一 server 添加 `/xxx/`。
+本地 API 继续监听 `127.0.0.1:8001`，前端继续监听 `127.0.0.1:5180`。`deploy/nginx-sqlplat.conf` 提供静态文件部署与 API 代理示例，配置后访问 <http://127.0.0.1:18000/sqlplat/>；不带末尾斜杠的 `/sqlplat` 会重定向到 `/sqlplat/`。已有监听 18000 的 server 时，只合并示例中的 location，不要重复创建 server；其他平台可在同一 server 添加 `/xxx/`。
 
-Nginx 将 `/sqlplat/api/...` 转为后端 `/api/...`，并将会话 Cookie 的 Path 改为 `/sqlplat/`。Vite 本地代理也执行相同的路径和 Cookie 转换，因此直接访问 5180 的子路径同样可登录。Nginx 访问 5180 时保留 `/sqlplat/` 前缀，并代理 WebSocket 以支持热更新。
+Nginx 将 `/sqlplat/api/...` 转为后端 `/api/...`，静态文件从 `/opt/www/sqlplat/` 读取。需要限定会话路径时，在 API location 添加 `proxy_cookie_path / /sqlplat/;`（下方完整生产配置已包含）。Vite 的本地代理会转换路径及 Cookie，因此开发时直接访问 5180 的子路径同样可登录。
 
-正式部署先运行 `npm run build`，让 Nginx 直接提供 `frontend/dist` 内容到 `/sqlplat/`，替换开发示例中转发到 5180 的 location；保留 API location。后端内部 `/api` 路由无需添加前缀。
+正式部署先运行 `npm run build`，将 `frontend/dist/` 内容发布到 `/opt/www/sqlplat/`。Nginx 直接提供静态文件，不需要启动 5180；后端内部 `/api` 路由无需添加前缀。
+
+工作台标签 ID 已兼容公网 HTTP 环境：支持时使用 `crypto.randomUUID()`，否则使用 `crypto.getRandomValues()` 生成 UUID。遇到旧构建的 `crypto.randomUUID is not a function` 错误时，重新构建并完整发布 `dist`（包括 `index.html` 和 `assets`），再强制刷新页面。HTTP 入口使用 `COOKIE_SECURE=false`；HTTPS 使用 `true`。304 表示缓存校验，不代表加载失败。
 
 ## 线上部署（Linux + systemd + Nginx）
 
-以下以项目目录 `/opt/sqlplat`、运行用户 `sqlplat`、静态文件目录 `/var/www/sqlplat`、结果目录 `/var/lib/sqlplat/results` 为例。入口为 `https://data.example.com:18000/sqlplat/`，请替换域名与证书路径。已有统一入口时，将下面的 location 合并进现有 server，其他平台继续使用各自路径。
+以下以项目目录 `/opt/sqlplat`、运行用户 `sqlplat`、静态文件目录 `/opt/www/sqlplat`、结果目录 `/var/lib/sqlplat/results` 为例。入口为 `https://data.example.com:18000/sqlplat/`，请替换域名与证书路径。已有统一入口时，将下面的 location 合并进现有 server，其他平台继续使用各自路径。
 
 线上 API 监听 `127.0.0.1:8001`；Nginx 直接提供构建后的前端文件，**无需启动 5180，也无需 Node.js 常驻进程**。API 必须保持单进程、单实例，不能使用多个 workers 或启动多个副本。
 
@@ -75,7 +100,7 @@ Nginx 将 `/sqlplat/api/...` 转为后端 `/api/...`，并将会话 Cookie 的 P
 
 ```sh
 sudo useradd --system --create-home --home-dir /home/sqlplat --shell /bin/bash sqlplat
-sudo install -d -m 755 -o sqlplat -g sqlplat /opt/sqlplat /var/www/sqlplat
+sudo install -d -m 755 -o sqlplat -g sqlplat /opt/sqlplat /opt/www/sqlplat
 sudo install -d -m 700 -o sqlplat -g sqlplat /var/lib/sqlplat/results
 ```
 
@@ -127,10 +152,10 @@ PYTHONPATH=backend uv run --no-sync python -m app.cli create-admin admin
 cd /opt/sqlplat/frontend
 npm ci
 npm run build
-rsync -a --delete dist/ /var/www/sqlplat/
+rsync -a --delete dist/ /opt/www/sqlplat/
 ```
 
-`--delete` 仅用于专属静态发布目录 `/var/www/sqlplat/`。该目录对应 Nginx 的 `/sqlplat/` 路径；Vite 已配置相同的 base，构建产物中的 JS、CSS 和编辑器 worker 均带此前缀。不要将其他平台的文件放入这个目录。
+`--delete` 仅用于专属静态发布目录 `/opt/www/sqlplat/`。该目录对应 Nginx 的 `/sqlplat/` 路径；Vite 已配置相同的 base，构建产物中的 JS、CSS 和编辑器 worker 均带此前缀。不要将其他平台的文件放入这个目录。
 
 ### 4. 使用 systemd 托管 API
 
@@ -181,7 +206,7 @@ server {
     ssl_certificate /etc/nginx/tls/data.example.com.crt;
     ssl_certificate_key /etc/nginx/tls/data.example.com.key;
 
-    root /var/www;
+    root /opt/www;
 
     location = /sqlplat {
         return 302 /sqlplat/;
@@ -214,7 +239,7 @@ server {
 }
 ```
 
-`root /var/www` 配合 `/sqlplat/...`，实际读取 `/var/www/sqlplat/...`。API 转发去掉应用前缀，Cookie Path 则限制为 `/sqlplat/`。静态路径和转发规则参见 [Nginx 静态文件说明](https://docs.nginx.com/nginx/admin-guide/web-server/serving-static-content/) 与 [代理模块说明](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)。本项目的 `deploy/nginx-sqlplat.conf` 是代理到 Vite 的开发示例，生产部署使用上述静态文件配置。
+`root /opt/www` 配合 `/sqlplat/...`，实际读取 `/opt/www/sqlplat/...`。API 转发去掉应用前缀，Cookie Path 则限制为 `/sqlplat/`。静态路径和转发规则参见 [Nginx 静态文件说明](https://docs.nginx.com/nginx/admin-guide/web-server/serving-static-content/) 与 [代理模块说明](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)。本项目的 `deploy/nginx-sqlplat.conf` 已是静态文件部署示例，监听本机 HTTP 18000；对外入口按上述配置补充域名、HTTPS 和 Cookie 路径设置。
 
 ```sh
 sudo nginx -t
@@ -241,7 +266,7 @@ uv run --no-sync alembic -c backend/alembic.ini upgrade head
 cd frontend
 npm ci
 npm run build
-rsync -a --delete dist/ /var/www/sqlplat/
+rsync -a --delete dist/ /opt/www/sqlplat/
 ```
 
 全部成功后由管理员启动服务，并重复本机及入口健康检查：
@@ -257,6 +282,7 @@ curl -fsS https://data.example.com:18000/sqlplat/api/health
 ## SQL 操作
 
 - **执行 SQL**：有选区时执行选区，选中全部即执行全文；无选区时执行光标所在完整 SQL，可以跨多行。快捷键为 ⌘/Ctrl + Enter。
+- **批量注释/取消注释**：Mac 使用 ⌘ + /，Windows/Linux 使用 Ctrl + /。选区涉及的行添加 `-- ` 注释，再按一次取消；无选区时切换当前行。保留缩进、跳过空行，支持撤销，不会执行 SQL。
 - 多条语句顺序执行，遇错停止，保留先前结果。
 - 同一任务使用同一数据库连接，不同任务相互独立。连接账号决定实际 SQL 权限。
 - 默认自动提交，写入可能立即生效；不提供跨任务事务或 DELIMITER/存储过程编辑工作流。
@@ -322,4 +348,4 @@ npm run e2e
 
 通过顶部“我的 SQL”搜索、打开、重命名和删除。打开仅回填编辑内容，不自动执行或加载旧结果。打开已保存项后，“保存 SQL”更新原记录，“另存为”创建新记录。未选择连接也可保存，执行前再选择连接。记录已被删除时，更新提示使用另存为。
 
-本次升级新增 `saved_queries` 表，已有环境运行 `uv run alembic -c backend/alembic.ini upgrade head` 后重启 API；本地启动脚本会自动执行迁移。
+本次升级新增 `saved_queries` 表，已有环境运行 `uv run alembic -c backend/alembic.ini upgrade head` 后重启 API；当前后台启动脚本已关闭自动迁移，启动前需显式执行升级命令。

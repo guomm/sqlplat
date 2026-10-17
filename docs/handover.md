@@ -1,6 +1,8 @@
 # SQL Atelier 首版开发交接
 
-交接日期：2026-10-09。本文面向在另一台机器继续开发的同学，以当前代码为准。线上部署详见 [README](../README.md#线上部署linux--systemd--nginx)，详细测试说明见 [testing.md](testing.md)。
+首次交接：2026-10-09；本次更新：2026-10-17。本文面向在另一台机器继续开发的同学，以当前代码为准。线上部署详见 [README](../README.md#线上部署linux--systemd--nginx)，详细测试说明见 [testing.md](testing.md)。
+
+本次交付包含 SQL 批量注释快捷键、执行结果区域字体放大、手动建表快照、静态 Nginx 配置以及后台启停脚本。建议先完成第 4 节初始化，再运行第 7 节验证；不要直接使用其他机器的环境或凭据文件。
 
 ## 1. 当前交付状态
 
@@ -16,9 +18,13 @@
 | 结果 | 分页预览、重复列名、精度处理、CSV/XLSX 下载、截断提示 |
 | 执行历史 | 本人历史、搜索和状态筛选；打开仅回填 SQL 和上下文，不重新执行 |
 | 我的 SQL | 保存整个标签、更新、另存为、搜索、打开、重命名和删除；仅本人可见 |
-| 路径部署 | `/sqlplat/` 前缀、开发代理、静态构建、Nginx 开发示例及生产部署说明 |
+| 路径部署 | `/sqlplat/` 前缀、开发代理、静态构建、Nginx 静态部署示例及生产部署说明 |
 
 统一「执行 SQL」按钮的规则：有选区就执行选区；选中全部即执行全文；无选区就执行光标所在的完整 SQL，而非单独一行。快捷键为 Ctrl/⌘ + Enter。格式化优先处理选区，无选区则处理全文；保存 SQL 始终保存标签全文。
+
+2026-10-16 补充快捷键：Ctrl/⌘ + / 批量切换选中行的 `-- ` 注释，无选区时切换当前行，保留缩进、跳过空行并支持撤销。`SqlEditor.tsx` 显式加载 Monaco comment contribution，`Workbench.tsx` 配置注释空格和空行策略；不要移除该加载，否则按需打包的编辑器不会自动注册注释命令。浏览器回归见 `frontend/e2e/sql-comments.spec.ts`。
+
+2026-10-17 调整执行结果区域的标题、状态、语句标签、表头、数据、行号、底部统计等字号，整体增大 2px；样式限定在结果区域，不修改全站主题。
 
 历史长期保留执行信息，查询结果是有保留期的临时文件：默认结果保留 24 小时、历史保留 90 天。「我的 SQL」存储在平台数据库中，不受上述保留期影响。浏览器草稿与服务端保存项是不同数据，退出登录会清除草稿。
 
@@ -47,7 +53,7 @@ Mac、Linux 均可开发。准备 uv、Python 3.12、Node.js 22.12+（开发验�
 | MySQL | 通常 `127.0.0.1:3306`，按本机实际配置 |
 | Doris | FE MySQL 协议端口通常为 9030，不是 HTTP 端口 |
 
-前端生产构建后的 `dist` 可从 Mac 复制到 Linux，目录内容应放到 `/var/www/sqlplat/`，而不是 `/var/www/sqlplat/dist/`。服务器无需 Node.js 常驻；Nginx 静态映射和 API 转发步骤见 README。
+前端生产构建后的 `dist` 可从 Mac 复制到 Linux，当前静态示例的目录为 `/opt/www/sqlplat/`，而不是 `/opt/www/sqlplat/dist/`。Nginx 的 `root` 为其父目录 `/opt/www`；服务器无需启动 5180 或 Node.js 常驻进程。其他部署目录需同步修改发布命令和 Nginx root。
 
 ## 4. 从零启动开发环境
 
@@ -76,8 +82,9 @@ uv run python scripts/bootstrap-local.py
 启动两个终端：
 
 ```sh
-# 终端 A，项目根目录；执行迁移后启动单进程 API
-./scripts/start-api.sh
+# 终端 A，项目根目录；显式迁移后在前台启动，方便查看日志
+uv run --no-sync alembic -c backend/alembic.ini upgrade head
+PYTHONPATH=backend uv run --no-sync uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8001 --workers 1
 ```
 
 ```sh
@@ -87,6 +94,8 @@ uv run python scripts/bootstrap-local.py
 
 打开 `http://127.0.0.1:5180/sqlplat/`，在本机查看 `.local/admin-access.txt` 后登录。不要将该文件、`.env` 或结果文件分享给其他同学。
 
+也可从项目根目录运行 `./scripts/start-api.sh` 后台启动。该脚本使用阿里云 PyPI 镜像同步依赖，写入根目录 `uvicorn.pid`、`uvicorn.log`，**当前已注释自动迁移**，必须先完成初始化或手动迁移。停止时仍需在项目根目录执行 `./scripts/stop-api.sh`。简单 PID 脚本不适用于前台进程或 systemd 启动的服务；不要同时运行多套启动方式。生产托管优先采用 README 的 systemd 示例。
+
 ### 4.2 手动初始化或已有数据库
 
 不使用脚本时，按 [README 的本地启动步骤](../README.md#本地启动) 创建专用平台数据库账号、复制并填写 `.env`、生成密钥、执行迁移、创建管理员，然后在管理中心添加目标连接。
@@ -94,6 +103,17 @@ uv run python scripts/bootstrap-local.py
 数据库密码中的特殊字符需要 URL 编码。已有数据库必须配套原 `ENCRYPTION_KEY`；丢失或更换密钥会导致已保存连接密码无法解密。仅 HTTP 的本地开发使用 `COOKIE_SECURE=false`，HTTPS 入口使用 `true`。
 
 手动初始化不会生成浏览器测试需要的 `.local/admin-access.txt` 和默认示例连接；若需运行现有 E2E，优先使用独立开发实例走推荐初始化流程。
+
+### 4.3 空库使用完整建表 SQL
+
+`deploy/schema-mysql.sql` 是当前迁移 `d19297a3c813` 的完整快照，包含 6 张业务表、索引、外键及 Alembic 版本记录；已在独立本地 MySQL 验证与模型一致。先建空的 `sqlplat` 库并授权，再从项目根目录导入：
+
+```sh
+mysql -h 127.0.0.1 -P 3306 -u sqlplat -p sqlplat < deploy/schema-mysql.sql
+PYTHONPATH=backend uv run --no-sync python -m app.cli create-admin admin
+```
+
+它不是已有数据库的升级/修复脚本；不要对部分迁移成功的库直接重复导入，不要跳过 SQL 错误继续执行最后的版本记录。未来新增迁移后，此快照仍只代表其标注版本。用户密码必须由应用生成哈希，目标连接密码必须经应用加密。
 
 ## 5. 代码导航
 
@@ -115,6 +135,7 @@ uv run python scripts/bootstrap-local.py
 | `frontend/src/Workbench.tsx` | 标签和草稿状态、元数据树、执行范围、任务轮询、保存项绑定 |
 | `frontend/src/SqlEditor.tsx` | Monaco 和本地 worker 配置，按需加载 |
 | `frontend/src/sql.ts`、`formatSql.ts` | 执行范围计算、SQL 拆分、格式化 |
+| `frontend/src/draftId.ts` | 标签 UUID 生成，兼容 HTTP 下缺少原生 randomUUID 的环境 |
 | `frontend/src/Results.tsx` | 结果表格及下载 |
 | `frontend/src/History.tsx` | 历史列表和打开操作 |
 | `frontend/src/SavedQueries.tsx`、`SaveQueryModal.tsx` | 我的 SQL 和保存弹窗 |
@@ -124,7 +145,9 @@ uv run python scripts/bootstrap-local.py
 | `frontend/vite.config.ts` | `/sqlplat/` base、5180 端口、API 路径及 Cookie 代理转换 |
 | `frontend/playwright.config.ts` | 8001/5180 服务启动与 Chrome E2E 配置 |
 | `shared/sql-cases.json` | 前后端 SQL 拆分共用样例 |
-| `deploy/nginx-sqlplat.conf` | 代理到开发服务的 Nginx 示例；生产静态配置在 README |
+| `deploy/nginx-sqlplat.conf` | `/opt/www/sqlplat` 静态部署及 8001 API 转发示例 |
+| `deploy/schema-mysql.sql` | 空库初始化快照，包含当前 Alembic 版本记录 |
+| `scripts/start-api.sh`、`stop-api.sh` | 后台启停和 PID/日志文件；必须从项目根目录使用停止脚本 |
 
 ## 6. 关键数据流与开发注意点
 
@@ -205,6 +228,10 @@ MySQL 测试会在 `sqlplat_demo` 创建随机测试表；并发删除测试会�
 
 这些是原开发机器的分轮验证记录，不代表接手机器已通过。请在新环境重新运行相关检查。现有 Starlette 弃用警告和 Monaco/AntD 构建包大小提示不影响上述通过结果；后续可专项优化。
 
+2026-10-17 上传前重新验证当前工作树：后端 64 项通过、1 个真实 Doris 测试跳过；前端 27 项通过；Chrome E2E 8 项通过；TypeScript/Vite 构建通过。浏览器流程包含批量注释、取消注释、选区边界、空行、缩进及撤销；本轮同时包含执行结果字号调整。文档链接、Shell 命令语法及待上传文件的敏感内容模式检查通过。
+
+2026-10-10 补充：修复公网 HTTP 缺少 `crypto.randomUUID()` 时工作台崩溃。标签 ID 使用原生接口或 `getRandomValues` 回退，前端测试新增原生调用、UUID 格式和多标签唯一性验证；原有完整 MySQL 浏览器流程在禁用原生 randomUUID 的条件下执行。修复上线需重新构建和发布完整 `dist`。
+
 ## 8. 已知限制与建议接手顺序
 
 目前不提供公开注册、定时 SQL、取消任务、跨任务手动事务、DELIMITER/存储过程编辑工作流、团队共享保存项或管理员跨用户结果查看。SQL 扫描假定标准 MySQL 转义规则，不支持通过 SQL 切换 ANSI_QUOTES/NO_BACKSLASH_ESCAPES 等模式。
@@ -222,6 +249,8 @@ MySQL 测试会在 `sqlplat_demo` 创建随机测试表；并发删除测试会�
 ## 9. 交付文件与独立配置
 
 继续开发需要完整源代码、锁文件、迁移、共享测试样例、脚本及文档。以下内容应在接手机器自行生成，不作为普通源代码交付：`.env`、`.local/admin-access.txt`、`.local/results`、`.venv`、`node_modules`、浏览器草稿及测试截图。
+
+`uvicorn.pid`、`uvicorn.log` 也属于机器本地运行文件，已忽略。当前 `uv.lock` 使用阿里云镜像源，包版本没有因此改变；保持锁文件随代码交付。静态 `dist` 不上传源代码仓库，由构建生成并单独发布。
 
 若交接的是已有平台数据而非独立新开发环境，需通过单独的受控渠道移交平台数据库备份和配套 `ENCRYPTION_KEY`；需要保留下载结果时同时移交结果目录。不要把这些敏感内容写入本文。
 

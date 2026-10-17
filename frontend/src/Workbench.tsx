@@ -598,6 +598,7 @@ export default function Workbench({
                 scrollBeyondLastLine: false,
                 automaticLayout: true,
                 tabSize: 2,
+                comments: { insertSpace: true, ignoreEmptyLines: true },
                 wordWrap: "on",
               }}
             />
@@ -607,8 +608,7 @@ export default function Workbench({
               SQL · UTF-8{draftError ? " · 浏览器存储已满，草稿未保存" : ""}
             </span>
             <span>
-              ⌘ / Ctrl + Enter 执行 · 选区优先，否则执行当前完整语句 ·
-              默认自动提交
+              ⌘ / Ctrl + Enter 执行 · ⌘ / Ctrl + / 注释 · 默认自动提交
             </span>
           </div>
         </div>

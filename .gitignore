@@ -12,3 +12,6 @@ test-results/
 .venv312/
 *.tsbuildinfo
 .superpowers/
+.ruff_cache/
+tar.sh
+uvicorn.*

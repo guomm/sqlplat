@@ -40,6 +40,8 @@ Playwright 启动真实 API 与前端本地服务，使用 `.local/admin-access.
 
 浏览器测试需要先运行本地初始化脚本。管理员密码修改后，请通过环境变量 `E2E_USERNAME`、`E2E_PASSWORD` 提供测试账号，或更新仅本机保存的凭据文件。工作台截图保存在 `.local/workbench.png`，下载文件位于 `.local/e2e-result.*`，均不提交版本控制。
 
+`frontend/e2e/sql-comments.spec.ts` 验证 Ctrl/⌘ + / 的全文、选中行、当前行注释切换和撤销，覆盖选区结束在下一行行首、缩进、空行及不误触发执行请求。
+
 ## Doris
 
 管理中心支持 Doris 的 MySQL 协议连接，默认端口 9030。实际 Doris 联调需要可访问的 FE 地址与测试账号。在未提供真实 Doris 服务时，不将 MySQL 测试结果视为 Doris 联调结果。
