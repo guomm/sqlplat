@@ -510,6 +510,38 @@ button:focus-visible {
   white-space: nowrap;
   height: 35px;
 }
+.result-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.result-sort-button > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.result-sort-button:hover,
+.result-sort-button.sorted {
+  color: var(--green);
+}
+.result-sort-indicator {
+  display: inline-flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  font-size: 9px;
+  color: #b2beb7;
+  gap: 1px;
+}
+.result-sort-indicator .active {
+  color: var(--green);
+}
 .result-table td > span {
   display: block;
   overflow: hidden;

@@ -1,8 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, App, Button, Empty, Pagination, Spin, Tabs, Tag } from "antd";
-import { DownloadOutlined, CopyOutlined } from "@ant-design/icons";
+import {
+  DownloadOutlined,
+  CopyOutlined,
+  CaretUpOutlined,
+  CaretDownOutlined,
+} from "@ant-design/icons";
 import { api, apiUrl, query } from "./api";
 import type { Task, ResultPage, Statement } from "./types";
+import { sortRows } from "./sortRows";
 export const statuses: Record<string, { text: string; color: string }> = {
   queued: { text: "排队中", color: "default" },
   running: { text: "执行中", color: "processing" },
@@ -21,14 +27,42 @@ export default function Results({ task }: { task: Task | null }) {
     [data, setData] = useState<ResultPage | null>(null),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(false),
-    [widths, setWidths] = useState<Record<number, number>>({});
+    [widths, setWidths] = useState<Record<number, number>>({}),
+    [sort, setSort] = useState<{
+      key: string;
+      column: number;
+      direction: "desc" | "asc";
+    } | null>(null);
   const statements = task?.statements || [],
     current = statements.find((s) => s.id === sid) || statements[0];
   const running = task && ["queued", "running"].includes(task.status);
+  const pageKey = `${task?.id}:${current?.id}:${page}`;
+  const activeSort = sort?.key === pageKey ? sort : null;
+  const displayedRows = useMemo(() => {
+    if (!data) return [];
+    return activeSort
+      ? sortRows(
+          data.rows,
+          activeSort.column,
+          data.columns[activeSort.column].type,
+          activeSort.direction,
+        )
+      : data.rows;
+  }, [data, activeSort]);
+  function toggleSort(column: number) {
+    setSort(
+      activeSort?.column !== column
+        ? { key: pageKey, column, direction: "desc" }
+        : activeSort.direction === "desc"
+          ? { key: pageKey, column, direction: "asc" }
+          : null,
+    );
+  }
   useEffect(() => {
     setSid(undefined);
     setPage(1);
     setWidths({});
+    setSort(null);
   }, [task?.id]);
   useEffect(() => {
     let alive = true;
@@ -162,6 +196,7 @@ export default function Results({ task }: { task: Task | null }) {
             setSid(Number(id));
             setPage(1);
             setWidths({});
+            setSort(null);
           }}
           items={statements.map((s) => ({
             key: String(s.id),
@@ -212,8 +247,45 @@ export default function Results({ task }: { task: Task | null }) {
                 <tr>
                   <th className="row-index">#</th>
                   {data.columns.map((c, i) => (
-                    <th key={i}>
-                      {c.name}
+                    <th
+                      key={i}
+                      aria-sort={
+                        activeSort?.column === i
+                          ? activeSort.direction === "desc"
+                            ? "descending"
+                            : "ascending"
+                          : "none"
+                      }
+                    >
+                      <button
+                        type="button"
+                        className={`result-sort-button${activeSort?.column === i ? " sorted" : ""}`}
+                        title={`点击${activeSort?.column !== i ? "倒序" : activeSort.direction === "desc" ? "正序" : "取消排序"}（仅当前页）`}
+                        onClick={() => toggleSort(i)}
+                      >
+                        <span>{c.name}</span>
+                        <span
+                          className="result-sort-indicator"
+                          aria-hidden="true"
+                        >
+                          <CaretUpOutlined
+                            className={
+                              activeSort?.column === i &&
+                              activeSort.direction === "asc"
+                                ? "active"
+                                : ""
+                            }
+                          />
+                          <CaretDownOutlined
+                            className={
+                              activeSort?.column === i &&
+                              activeSort.direction === "desc"
+                                ? "active"
+                                : ""
+                            }
+                          />
+                        </span>
+                      </button>
                       <span
                         className="resize-handle"
                         onPointerDown={(e) => resize(i, e)}
@@ -223,7 +295,7 @@ export default function Results({ task }: { task: Task | null }) {
                 </tr>
               </thead>
               <tbody>
-                {data.rows.map((row, r) => (
+                {displayedRows.map((row, r) => (
                   <tr key={r}>
                     <td className="row-index">{(page - 1) * 100 + r + 1}</td>
                     {row.map((v, i) => (
@@ -260,6 +332,7 @@ export default function Results({ task }: { task: Task | null }) {
             <span>
               预览前 {data.total.toLocaleString()} 行 · 已保存{" "}
               {data.saved_rows.toLocaleString()} 行
+              {activeSort && " · 仅当前页排序"}
             </span>
             <Pagination
               size="small"
@@ -267,7 +340,10 @@ export default function Results({ task }: { task: Task | null }) {
               pageSize={100}
               total={data.total}
               showSizeChanger={false}
-              onChange={setPage}
+              onChange={(value) => {
+                setPage(value);
+                setSort(null);
+              }}
             />
           </div>
         </>

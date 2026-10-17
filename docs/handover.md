@@ -137,6 +137,7 @@ PYTHONPATH=backend uv run --no-sync python -m app.cli create-admin admin
 | `frontend/src/sql.ts`、`formatSql.ts` | 执行范围计算、SQL 拆分、格式化 |
 | `frontend/src/draftId.ts` | 标签 UUID 生成，兼容 HTTP 下缺少原生 randomUUID 的环境 |
 | `frontend/src/Results.tsx` | 结果表格及下载 |
+| `frontend/src/sortRows.ts` | 当前页前端排序、NULL 置后和精确数值比较，不修改后端数据 |
 | `frontend/src/History.tsx` | 历史列表和打开操作 |
 | `frontend/src/SavedQueries.tsx`、`SaveQueryModal.tsx` | 我的 SQL 和保存弹窗 |
 | `frontend/src/Admin.tsx` | 用户与连接管理、删除确认 |
@@ -154,6 +155,8 @@ PYTHONPATH=backend uv run --no-sync python -m app.cli create-admin admin
 ### 执行与结果
 
 前端计算用户要执行的 SQL → 提交 API → 校验连接、SQL 和队列容量 → 保存任务 → 线程池执行 → 按语句保存状态及结果文件 → 前端轮询并加载结果。CSV/XLSX 从已保存结果导出，不重新运行 SQL。
+
+2026-10-17 增加结果列名排序：依次倒序、正序、取消，仅操作当前页已经加载的数据，不调用后端、不修改原始数组，也不影响下载顺序。排序按列位置区分重名列，NULL 两个方向均置后；数值字符串通过有效数字和指数精确比较，避免长整数和小数转为 JavaScript Number 后丢精度。翻页、切换语句和新查询重置排序；列宽拖动不触发排序。
 
 同一任务共用一个目标连接，多语句顺序执行。结果按列的位置保存，不能改成以列名为唯一键，否则重复列名会丢数据。长整数与高精度小数需保持现有序列化策略；Excel 导出还处理公式字符串、非法 XML 字符及单元格长度限制。
 

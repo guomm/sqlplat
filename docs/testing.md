@@ -42,6 +42,8 @@ Playwright 启动真实 API 与前端本地服务，使用 `.local/admin-access.
 
 `frontend/e2e/sql-comments.spec.ts` 验证 Ctrl/⌘ + / 的全文、选中行、当前行注释切换和撤销，覆盖选区结束在下一行行首、缩进、空行及不误触发执行请求。
 
+`frontend/src/sortRows.test.ts` 与 `Results.test.tsx` 覆盖当前页排序的三态切换、原始数据恢复、重名列、精确数值、NULL 置后及不发送请求。`frontend/e2e/result-sort.spec.ts` 验证真实展示数据排序、分页重置、语句切换、键盘操作和拖动列宽不误触发排序。
+
 ## Doris
 
 管理中心支持 Doris 的 MySQL 协议连接，默认端口 9030。实际 Doris 联调需要可访问的 FE 地址与测试账号。在未提供真实 Doris 服务时，不将 MySQL 测试结果视为 Doris 联调结果。

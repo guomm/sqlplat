@@ -1,5 +1,11 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  cleanup,
+  fireEvent,
+} from "@testing-library/react";
 import { App, ConfigProvider } from "antd";
 import Results from "./Results";
 import type { Task } from "./types";
@@ -88,5 +94,66 @@ describe("结果展示", () => {
     wrap(task);
     await screen.findByText("结果已过期");
     expect(screen.getByRole("button", { name: "下载 CSV" })).toBeDisabled();
+  });
+  it("列名依次倒序、正序、取消，重复列名使用列位置", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            columns: task.statements[0].columns,
+            rows: [
+              [2, 20],
+              [1, 10],
+              [3, 30],
+            ],
+            total: 3,
+            saved_rows: 3,
+            truncated: false,
+          }),
+          { status: 200 },
+        ),
+    );
+    wrap(task);
+    await screen.findByText("20");
+    fireEvent.click(screen.getAllByRole("button", { name: "x" })[0]);
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("columnheader", { name: "x" })[0],
+      ).toHaveAttribute("aria-sort", "descending"),
+    );
+    await waitFor(() =>
+      expect(
+        document.querySelector("tbody tr td:nth-child(2) span"),
+      ).toHaveTextContent("3"),
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getAllByRole("button", { name: "x" })[0]);
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("columnheader", { name: "x" })[0],
+      ).toHaveAttribute("aria-sort", "ascending"),
+    );
+    expect(
+      document.querySelector("tbody tr td:nth-child(2) span"),
+    ).toHaveTextContent("1");
+    fireEvent.click(screen.getAllByRole("button", { name: "x" })[0]);
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("columnheader", { name: "x" })[0],
+      ).toHaveAttribute("aria-sort", "none"),
+    );
+    expect(
+      document.querySelector("tbody tr td:nth-child(2) span"),
+    ).toHaveTextContent("2");
+    fireEvent.click(screen.getAllByRole("button", { name: "x" })[1]);
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("columnheader", { name: "x" })[1],
+      ).toHaveAttribute("aria-sort", "descending"),
+    );
+    expect(
+      document.querySelector("tbody tr td:nth-child(3) span"),
+    ).toHaveTextContent("30");
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
