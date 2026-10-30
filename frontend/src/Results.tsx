@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, App, Button, Empty, Pagination, Spin, Tabs, Tag } from "antd";
+import {
+  Alert,
+  App,
+  Button,
+  Empty,
+  Input,
+  Pagination,
+  Spin,
+  Tabs,
+  Tag,
+} from "antd";
 import {
   DownloadOutlined,
   CopyOutlined,
@@ -9,6 +19,7 @@ import {
 import { api, apiUrl, query } from "./api";
 import type { Task, ResultPage, Statement } from "./types";
 import { sortRows } from "./sortRows";
+import { copyText } from "./clipboard";
 export const statuses: Record<string, { text: string; color: string }> = {
   queued: { text: "排队中", color: "default" },
   running: { text: "执行中", color: "processing" },
@@ -21,7 +32,28 @@ export const utc = (value: string) =>
     hour12: false,
   });
 export default function Results({ task }: { task: Task | null }) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
+  async function copyCell(text: string) {
+    try {
+      await copyText(text);
+      message.success("已复制");
+    } catch {
+      modal.info({
+        title: "浏览器未允许自动复制，请手动复制",
+        content: (
+          <Input.TextArea
+            aria-label="待复制内容"
+            value={text}
+            readOnly
+            autoFocus
+            onFocus={(event) => event.target.select()}
+            autoSize={{ minRows: 3, maxRows: 10 }}
+          />
+        ),
+        okText: "关闭",
+      });
+    }
+  }
   const [sid, setSid] = useState<number>(),
     [page, setPage] = useState(1),
     [data, setData] = useState<ResultPage | null>(null),
@@ -307,10 +339,7 @@ export default function Results({ task }: { task: Task | null }) {
                           className="copy-cell"
                           aria-label="复制单元格"
                           onClick={() =>
-                            navigator.clipboard
-                              .writeText(v === null ? "NULL" : String(v))
-                              .then(() => message.success("已复制"))
-                              .catch(() => message.error("浏览器不允许复制"))
+                            copyCell(v === null ? "NULL" : String(v))
                           }
                         >
                           <CopyOutlined />
