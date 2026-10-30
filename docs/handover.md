@@ -264,3 +264,19 @@ MySQL 测试会在 `sqlplat_demo` 创建随机测试表；并发删除测试会�
 - [验证记录](acceptance.md)：已验证项目及尚未验证范围。
 - [实施记录](implementation.md)：早期实施过程及首版补充记录。
 - [README](../README.md)：启动、配置和线上部署操作。
+
+## 2026-10-30 PostgreSQL 数据源补充
+
+- 管理中心新增 PostgreSQL 类型（`postgresql`），默认端口 5432；无需平台结构迁移。
+- 驱动为 psycopg 3；执行自动提交，默认库留空连接 `postgres`。平台数据库仍为 MySQL。
+- 支持数据库列表、带 schema 的表名、字段浏览、连接测试、SQL 执行和导出。
+- 前后端扫描器按连接类型处理 PG 美元引号、嵌套注释、字符串和 `#` 运算符，格式化使用 PG 方言。
+- PG TLS 使用 verify-full；真实 TLS 尚未验收。PG 当前使用客户端结果缓冲，大查询需限制返回量。
+- 真实 PG 回归：在专用开发实例设置 `RUN_PG_TESTS=1`，通过 `PGHOST`、`PGPORT`、`PGUSER`、
+  `PGPASSWORD`、`PGDATABASE` 提供连接信息，运行 `uv run pytest -q backend/tests/test_postgresql_integration.py`。
+  测试创建随机表并清理，验证元数据、读写、多语句、精度、导出、失败停止和超时。
+
+PostgreSQL 资源浏览补充：数据库下方新增 Schema 下拉框，优先选择 public，否则选择首项。
+新增 `/api/connections/{cid}/schemas?database=...`，仅返回有 USAGE 权限的非系统 Schema；
+表接口支持可选 `schema` 参数，使用参数绑定过滤，兼容未传参数的调用。
+Schema 随浏览器标签草稿保留，切换连接或数据库后重置；不改写 SQL 的 search_path。

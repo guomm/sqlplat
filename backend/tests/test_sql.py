@@ -35,3 +35,10 @@ def test_shared_sql_fixtures():
         (Path(__file__).parents[2] / "shared/sql-cases.json").read_text()
     ):
         assert [p["sql"] for p in split_statements(case["input"])] == case["expected"]
+
+
+def test_postgresql_syntax():
+    from app.sql import split_statements
+    sql = "SELECT $tag$a;b$tag$, 1 # 2; /* outer /* inner */ end */ SELECT 'a\\'; --comment\nSELECT 3"
+    assert len(split_statements(sql, 'postgresql')) == 3
+    assert len(split_statements("SELECT E'a\\\';b'; SELECT 2", 'postgresql')) == 2

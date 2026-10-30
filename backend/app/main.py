@@ -325,12 +325,12 @@ def create_app(settings=None):
         db.commit()
         return Response(status_code=204)
 
-    def target_call(conn, sql, database=None):
+    def target_call(conn, sql, database=None, params=None):
         try:
             secret = settings.crypto().decrypt(conn.password_cipher.encode()).decode()
             with connect_target(snapshot(conn), secret, 10, database) as target:
                 with target.cursor() as cur:
-                    cur.execute(sql)
+                    cur.execute(sql, params)
                     names = [d[0] for d in cur.description] if cur.description else []
                     rows = cur.fetchall()
                     return names, rows
@@ -349,19 +349,50 @@ def create_app(settings=None):
 
     @app.get("/api/connections/{cid}/databases")
     def databases(cid: int, user=Depends(authenticated), db=Depends(db_dep)):
-        _, rows = target_call(enabled_connection(cid, db), "SHOW DATABASES")
+        conn = enabled_connection(cid, db)
+        sql = ("SELECT datname FROM pg_database WHERE datallowconn "
+               "AND NOT datistemplate AND has_database_privilege(datname, 'CONNECT') ORDER BY datname"
+               if conn.kind == "postgresql" else "SHOW DATABASES")
+        _, rows = target_call(conn, sql)
+        return [row[0] for row in rows]
+
+    @app.get("/api/connections/{cid}/schemas")
+    def schemas(
+        cid: int,
+        database: str = Query(min_length=1, max_length=128),
+        user=Depends(authenticated),
+        db=Depends(db_dep),
+    ):
+        conn = enabled_connection(cid, db)
+        if conn.kind != "postgresql":
+            raise HTTPException(422, "仅 PostgreSQL 数据源支持 Schema")
+        _, rows = target_call(
+            conn,
+            "SELECT nspname FROM pg_catalog.pg_namespace "
+            "WHERE nspname !~ '^pg_' AND nspname <> 'information_schema' "
+            "AND has_schema_privilege(oid, 'USAGE') ORDER BY nspname",
+            database,
+        )
         return [row[0] for row in rows]
 
     @app.get("/api/connections/{cid}/tables")
     def tables(
         cid: int,
         database: str = Query(min_length=1, max_length=128),
+        schema: str | None = Query(default=None, min_length=1, max_length=128),
         user=Depends(authenticated),
         db=Depends(db_dep),
     ):
-        _, rows = target_call(
-            enabled_connection(cid, db), "SHOW TABLES FROM " + identifier(database)
-        )
+        conn = enabled_connection(cid, db)
+        if conn.kind == "postgresql":
+            _, rows = target_call(conn,
+                "SELECT quote_ident(schemaname) || '.' || quote_ident(tablename) "
+                "FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog', 'information_schema') "
+                + ("AND schemaname = %s " if schema is not None else "")
+                + "ORDER BY schemaname, tablename",
+                database, (schema,) if schema is not None else None)
+        else:
+            _, rows = target_call(conn, "SHOW TABLES FROM " + identifier(database))
         return [row[0] for row in rows]
 
     @app.get("/api/connections/{cid}/columns")
@@ -372,8 +403,15 @@ def create_app(settings=None):
         user=Depends(authenticated),
         db=Depends(db_dep),
     ):
+        conn = enabled_connection(cid, db)
+        if conn.kind == "postgresql":
+            names, rows = target_call(conn,
+                'SELECT a.attname AS "Field", format_type(a.atttypid, a.atttypmod) AS "Type" '
+                'FROM pg_attribute a WHERE a.attrelid = to_regclass(%s) '
+                'AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum', database, (table,))
+            return [dict(zip(names, row)) for row in rows]
         names, rows = target_call(
-            enabled_connection(cid, db),
+            conn,
             "SHOW FULL COLUMNS FROM " + identifier(database) + "." + identifier(table),
         )
         return [dict(zip(names, row)) for row in rows]
@@ -426,11 +464,11 @@ def create_app(settings=None):
 
     @app.post("/api/executions", status_code=202)
     def execute(data: ExecutionInput, user=Depends(authenticated), db=Depends(db_dep)):
+        conn = enabled_connection(data.connection_id, db, lock=True)
         try:
-            validate_sql(data.sql)
+            validate_sql(data.sql, conn.kind)
         except ValueError as exc:
             raise HTTPException(422, str(exc))
-        conn = enabled_connection(data.connection_id, db, lock=True)
         if not runner.pool.acquire():
             raise HTTPException(429, "执行队列已满，请稍后重试")
         try:

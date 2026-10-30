@@ -326,10 +326,14 @@ export default function Admin() {
                 options={[
                   { value: "mysql", label: "MySQL" },
                   { value: "doris", label: "Doris" },
+                  { value: "postgresql", label: "PostgreSQL" },
                 ]}
                 onChange={(v) => {
                   if (!editing)
-                    connForm.setFieldValue("port", v === "doris" ? 9030 : 3306);
+                    connForm.setFieldValue(
+                      "port",
+                      v === "doris" ? 9030 : v === "postgresql" ? 5432 : 3306,
+                    );
                 }}
               />
             </Form.Item>

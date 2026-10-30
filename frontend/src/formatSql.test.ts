@@ -19,3 +19,9 @@ describe("SQL 格式化", () => {
     expect(() => formatSql("select 'unfinished")).toThrow();
   });
 });
+
+ it("PostgreSQL casts and dollar strings", () => {
+  const formatted = formatSql("select $$a;b$$::text", "postgresql");
+  expect(formatted).toContain("$$a;b$$");
+  expect(formatted).toContain("::text");
+});

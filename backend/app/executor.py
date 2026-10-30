@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 import pymysql
+import psycopg
 from sqlalchemy import delete, select, update
 
 from .models import Execution, LoginSession, Statement, utcnow
@@ -47,6 +48,14 @@ class BoundedPool:
 
 def abort_connection(connection):
     # A socket shutdown interrupts a blocked receive; Future.cancel does not.
+    if isinstance(connection, psycopg.Connection):
+        try:
+            connection.cancel()
+        except psycopg.Error:
+            pass
+        finally:
+            connection.close()
+        return
     sock = getattr(connection, "_sock", None)
     if sock:
         try:
@@ -170,12 +179,12 @@ class Executor:
                         setup.execute(
                             "SET query_timeout = %s", (self.settings.execution_timeout,)
                         )
-                    else:
+                    elif config["kind"] != "postgresql":
                         setup.execute(
                             "SET SESSION max_execution_time = %s",
                             (self.settings.execution_timeout * 1000,),
                         )
-                for ordinal, part in enumerate(validate_sql(task.sql)):
+                for ordinal, part in enumerate(validate_sql(task.sql, config["kind"])):
                     if timed_out.is_set() or time.monotonic() >= deadline:
                         raise TimeoutError()
                     current = Statement(
@@ -258,7 +267,7 @@ class Executor:
             except Exception as exc:
                 uncertain = (
                     timed_out.is_set()
-                    or isinstance(exc, (TimeoutError, OverflowError, OSError))
+                    or isinstance(exc, (TimeoutError, OverflowError, OSError, psycopg.OperationalError))
                     or (
                         isinstance(exc, pymysql.OperationalError)
                         and exc.args[0] in (2006, 2013, 1317, 3024)

@@ -7,7 +7,7 @@ export type User = {
 export type Connection = {
   id: number;
   name: string;
-  kind: "mysql" | "doris";
+  kind: "mysql" | "doris" | "postgresql";
   database: string;
   enabled: boolean;
   host?: string;

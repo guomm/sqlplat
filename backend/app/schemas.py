@@ -50,7 +50,7 @@ class TLS(Input):
 
 class ConnectionInput(Input):
     name: str = Field(min_length=1, max_length=100)
-    kind: Literal["mysql", "doris"]
+    kind: Literal["mysql", "doris", "postgresql"]
     host: str = Field(min_length=1, max_length=255)
     port: int = Field(ge=1, le=65535)
     username: str = Field(min_length=1, max_length=128)

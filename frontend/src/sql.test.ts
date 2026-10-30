@@ -40,3 +40,13 @@ describe("自动执行范围", () => {
       "SELECT\n 2",
     ));
 });
+
+it("PostgreSQL dollar quotes, operators and nested comments", () => {
+  const sql =
+    "SELECT $tag$a;b$tag$, 1 # 2; /* outer /* inner */ end */ SELECT 2; --comment\nSELECT 3";
+  expect(splitStatements(sql, "postgresql")).toHaveLength(3);
+  expect(
+    executionText("current", "SELECT $$a;b$$; SELECT 2", "", 8, "postgresql"),
+  ).toBe("SELECT $$a;b$$");
+  expect(() => splitStatements("SELECT $x$open", "postgresql")).toThrow();
+});

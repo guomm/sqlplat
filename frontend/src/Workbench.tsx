@@ -26,6 +26,7 @@ type Draft = {
   sql: string;
   connection?: number;
   database: string;
+  schema?: string;
   taskId?: string;
   savedSqlId?: string;
   active?: boolean;
@@ -81,6 +82,8 @@ export default function Workbench({
     ),
     [connections, setConnections] = useState<Connection[]>([]),
     [databases, setDatabases] = useState<string[]>([]),
+    [schemas, setSchemas] = useState<string[]>([]),
+    [schemasLoading, setSchemasLoading] = useState(false),
     [tables, setTables] = useState<string[]>([]),
     [nodes, setNodes] = useState<Node[]>([]),
     [search, setSearch] = useState(""),
@@ -91,6 +94,8 @@ export default function Workbench({
     [editorHeight, setEditorHeight] = useState(320);
   const edit = useRef<editor.IStandaloneCodeEditor | null>(null),
     tab = tabs.find((t) => t.id === active) || tabs[0];
+  const connectionKind = connections.find((c) => c.id === tab.connection)?.kind;
+  const isPostgres = connectionKind === "postgresql";
   const patch = (data: Partial<Draft>) =>
     setTabs((old) => old.map((t) => (t.id === active ? { ...t, ...data } : t)));
   const formatEditor = () => {
@@ -103,7 +108,10 @@ export default function Workbench({
     const source = model.getValueInRange(range);
     if (!source.trim()) return;
     try {
-      const formatted = formatSql(source);
+      const formatted = formatSql(
+        source,
+        connections.find((c) => c.id === tab.connection)?.kind,
+      );
       instance.pushUndoStop();
       instance.executeEdits("format-sql", [
         { range, text: formatted, forceMoveMarkers: true },
@@ -233,20 +241,72 @@ export default function Workbench({
   }, [tab.connection]);
   useEffect(() => {
     let alive = true;
+    setSchemas([]);
+    setSchemasLoading(false);
+    if (!isPostgres || !tab.connection || !tab.database) return;
+    const draftId = tab.id;
+    setSchemasLoading(true);
+    api<string[]>(
+      `/connections/${tab.connection}/schemas?${query({ database: tab.database })}`,
+    )
+      .then((values) => {
+        if (!alive) return;
+        setSchemas(values);
+        setTabs((old) =>
+          old.map((draft) =>
+            draft.id === draftId
+              ? {
+                  ...draft,
+                  schema:
+                    draft.schema && values.includes(draft.schema)
+                      ? draft.schema
+                      : values.includes("public")
+                        ? "public"
+                        : values[0],
+                }
+              : draft,
+          ),
+        );
+      })
+      .catch((e) => {
+        if (alive) setMetadataError(e.message);
+      })
+      .finally(() => {
+        if (alive) setSchemasLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [active, tab.connection, tab.database, isPostgres]);
+  useEffect(() => {
+    let alive = true;
     setTables([]);
     setNodes([]);
     setSearch("");
     setMetadataError("");
-    if (!tab.connection || !tab.database) return;
+    setMetaLoading(false);
+    if (
+      !tab.connection ||
+      !connectionKind ||
+      !tab.database ||
+      (isPostgres && !tab.schema)
+    )
+      return;
     setMetaLoading(true);
     api<string[]>(
-      `/connections/${tab.connection}/tables?${query({ database: tab.database })}`,
+      `/connections/${tab.connection}/tables?${query({ database: tab.database, ...(isPostgres ? { schema: tab.schema! } : {}) })}`,
     )
       .then((v) => {
         if (alive) {
           setTables(v);
           setNodes(
-            v.map((t) => ({ key: t, title: t, icon: <TableOutlined /> })),
+            v.map((t) => ({
+              key: t,
+              title: isPostgres
+                ? t.replace(/^(?:"(?:[^"]|"")*"|[^.]+)\./, "")
+                : t,
+              icon: <TableOutlined />,
+            })),
           );
         }
       })
@@ -259,7 +319,7 @@ export default function Workbench({
     return () => {
       alive = false;
     };
-  }, [tab.connection, tab.database]);
+  }, [tab.connection, tab.database, tab.schema, connectionKind]);
   useEffect(() => {
     let alive = true,
       timer: ReturnType<typeof setTimeout>;
@@ -310,6 +370,7 @@ export default function Workbench({
         sql,
         model && selection ? model.getValueInRange(selection) : "",
         model && position ? model.getOffsetAt(position) : 0,
+        connections.find((c) => c.id === tab.connection)?.kind,
       );
       if (!text.trim()) {
         message.warning("当前范围内没有可执行 SQL");
@@ -335,7 +396,11 @@ export default function Workbench({
   }
   const executeRef = useRef(execute);
   executeRef.current = execute;
-  const metadataContext = `${tab.connection || ""}:${tab.database}`;
+  const metadataContext = JSON.stringify([
+    tab.connection,
+    tab.database,
+    tab.schema,
+  ]);
   const metadataContextRef = useRef(metadataContext);
   metadataContextRef.current = metadataContext;
   async function loadFields(node: { key: React.Key }) {
@@ -421,7 +486,11 @@ export default function Workbench({
           value={tab.connection}
           onChange={(id) => {
             const c = connections.find((c) => c.id === id);
-            patch({ connection: id, database: c?.database || "" });
+            patch({
+              connection: id,
+              database: c?.database || "",
+              schema: undefined,
+            });
           }}
           options={connections.map((c) => ({
             value: c.id,
@@ -439,12 +508,32 @@ export default function Workbench({
           showSearch
           placeholder="选择数据库"
           value={tab.database || undefined}
-          onChange={(database) => patch({ database: database || "" })}
+          onChange={(database) =>
+            patch({ database: database || "", schema: undefined })
+          }
           options={databases.map((d) => ({ value: d, label: d }))}
           loading={metaLoading}
           allowClear
-          onClear={() => patch({ database: "" })}
+          onClear={() => patch({ database: "", schema: undefined })}
         />
+        {isPostgres && (
+          <>
+            <label>Schema</label>
+            <Select
+              aria-label="Schema"
+              showSearch
+              placeholder="选择 Schema"
+              value={tab.schema || undefined}
+              disabled={!tab.database}
+              loading={schemasLoading}
+              options={schemas.map((schema) => ({
+                value: schema,
+                label: schema,
+              }))}
+              onChange={(schema) => patch({ schema })}
+            />
+          </>
+        )}
         <div className="schema-divider" />
         <Input
           aria-label="搜索表"
@@ -470,7 +559,10 @@ export default function Workbench({
             onDoubleClick={(_, node) => {
               if (tables.includes(String(node.key))) {
                 const quoted =
-                  "`" + String(node.key).replaceAll("`", "``") + "`";
+                  connections.find((c) => c.id === tab.connection)?.kind ===
+                  "postgresql"
+                    ? String(node.key)
+                    : "`" + String(node.key).replaceAll("`", "``") + "`";
                 edit.current?.trigger("insert", "type", { text: quoted });
               }
             }}
