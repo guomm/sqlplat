@@ -94,7 +94,7 @@ PYTHONPATH=backend uv run --no-sync uvicorn app.main:create_app --factory --host
 
 打开 `http://127.0.0.1:5180/sqlplat/`，在本机查看 `.local/admin-access.txt` 后登录。不要将该文件、`.env` 或结果文件分享给其他同学。
 
-也可从项目根目录运行 `./scripts/start-api.sh` 后台启动。该脚本使用阿里云 PyPI 镜像同步依赖，写入根目录 `uvicorn.pid`、`uvicorn.log`，**当前已注释自动迁移**，必须先完成初始化或手动迁移。停止时仍需在项目根目录执行 `./scripts/stop-api.sh`。简单 PID 脚本不适用于前台进程或 systemd 启动的服务；不要同时运行多套启动方式。生产托管优先采用 README 的 systemd 示例。
+也可从项目根目录运行 `./scripts/start-api.sh` 后台启动。该脚本使用阿里云 PyPI 镜像同步依赖，写入根目录 `uvicorn.pid`、`uvicorn.log`，**当前已注释自动迁移**，必须先完成初始化或手动迁移。停止使用 `./scripts/stop-api.sh`，脚本自动定位项目根目录。PID 直接对应 uvicorn 进程，启动后检查进程是否存活（就绪状态查看日志），停止时等待进程退出并兼容旧 `uv run` 子进程。已脱离父进程的旧实例需核对监听端口后手动清理一次。简单 PID 脚本不适用于前台进程或 systemd 启动的服务；不要同时运行多套启动方式。生产托管优先采用 README 的 systemd 示例。
 
 ### 4.2 手动初始化或已有数据库
 
@@ -148,7 +148,7 @@ PYTHONPATH=backend uv run --no-sync python -m app.cli create-admin admin
 | `shared/sql-cases.json` | 前后端 SQL 拆分共用样例 |
 | `deploy/nginx-sqlplat.conf` | `/opt/www/sqlplat` 静态部署及 8001 API 转发示例 |
 | `deploy/schema-mysql.sql` | 空库初始化快照，包含当前 Alembic 版本记录 |
-| `scripts/start-api.sh`、`stop-api.sh` | 后台启停和 PID/日志文件；必须从项目根目录使用停止脚本 |
+| `scripts/start-api.sh`、`stop-api.sh` | 后台启停和 PID/日志文件；脚本自动定位项目根目录 |
 
 ## 6. 关键数据流与开发注意点
 
