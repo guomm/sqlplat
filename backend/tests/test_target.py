@@ -32,6 +32,7 @@ def test_postgresql_connection_parameters(monkeypatch):
     assert captured['sslmode'] == 'verify-full'
     assert captured['sslrootcert'] == '/ca.pem'
     assert captured['autocommit'] is True
+    assert captured['client_encoding'] == 'UTF8'
     assert captured['options'] == '-c statement_timeout=12000'
     assert captured['connect_timeout'] == 10
 

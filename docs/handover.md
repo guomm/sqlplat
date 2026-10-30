@@ -280,3 +280,7 @@ PostgreSQL 资源浏览补充：数据库下方新增 Schema 下拉框，优先�
 新增 `/api/connections/{cid}/schemas?database=...`，仅返回有 USAGE 权限的非系统 Schema；
 表接口支持可选 `schema` 参数，使用参数绑定过滤，兼容未传参数的调用。
 Schema 随浏览器标签草稿保留，切换连接或数据库后重置；不改写 SQL 的 search_path。
+
+PG 编码修复：连接显式指定 `client_encoding=UTF8`，防止 SQL_ASCII 客户端将 text/varchar
+返回为 bytes 后显示成 Base64。真正 bytea 字段继续按 Base64 表示。重启后重新执行查询生效，
+历史结果文件不会自动重写。真实 PG 回归覆盖 PGCLIENTENCODING=SQL_ASCII 的环境。

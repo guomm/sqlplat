@@ -11,6 +11,7 @@ def connect_target(config, password, timeout, database=None):
             host=config["host"], port=config["port"], user=config["username"],
             password=password, dbname=database or config.get("database") or "postgres",
             autocommit=True, connect_timeout=min(timeout, 10),
+            client_encoding="UTF8",
             options=f"-c statement_timeout={int(timeout * 1000)}",
             sslmode="verify-full" if tls.get("enabled") else "disable",
             **{key: tls[field] for key, field in (

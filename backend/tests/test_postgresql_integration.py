@@ -12,7 +12,9 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_postgresql_metadata_execution_and_download(admin, app):
+def test_postgresql_metadata_execution_and_download(admin, app, monkeypatch):
+    # A SQL_ASCII client returns even text/varchar as bytes in psycopg.
+    monkeypatch.setenv("PGCLIENTENCODING", "SQL_ASCII")
     config = dict(name="PG test", kind="postgresql", host=os.getenv("PGHOST", "127.0.0.1"),
                   port=int(os.getenv("PGPORT", "5432")), username=os.getenv("PGUSER", "postgres"),
                   password=os.getenv("PGPASSWORD", ""), database=os.getenv("PGDATABASE", "postgres"))
@@ -37,6 +39,9 @@ def test_postgresql_metadata_execution_and_download(admin, app):
 
     try:
         with connect_target(config, config["password"], 10) as conn:
+            assert conn.info.encoding == "utf-8"
+            row = conn.execute("SELECT '金价通知'::text, '中文'::varchar, decode('00ff', 'hex')").fetchone()
+            assert row == ("金价通知", "中文", b"\x00\xff")
             conn.execute(f'CREATE SCHEMA "{schema}"')
             conn.execute(f'CREATE TABLE "{schema}".other_table(id int)')
         schemas = admin.get(f"/api/connections/{cid}/schemas", params={"database": config["database"]})
@@ -53,7 +58,9 @@ def test_postgresql_metadata_execution_and_download(admin, app):
         result = admin.get(path).json()
         assert result["rows"] == [["9007199254740993", "1.000000000000000001", "中文;a"]]
         assert [c["name"] for c in result["columns"]] == ["x", "x", "value"]
-        assert admin.get(path + "/download?format=csv").status_code == 200
+        csv = admin.get(path + "/download?format=csv")
+        assert csv.status_code == 200
+        assert "中文;a" in csv.content.decode("utf-8-sig")
         assert admin.get(path + "/download?format=xlsx").status_code == 200
         params = {"database": config["database"]}
         assert table in admin.get(f"/api/connections/{cid}/tables", params=params).json()
